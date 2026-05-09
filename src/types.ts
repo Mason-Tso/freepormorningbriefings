@@ -26,6 +26,6 @@ export interface GenerationResult {
   briefing_text: string;
   market_overview: string;
   graphic_svg: string;
-  grwm_script: GRWMScript;
+  grwm_script?: GRWMScript;
   higgsfield_video_url?: string;
 }

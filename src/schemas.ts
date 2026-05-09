@@ -47,6 +47,7 @@ export const WatchItemSchema = z.object({
 
 export const BriefingSchema = z.object({
   title: z.string(),
+  theme: z.string(),
   date: z.string(),
   events: z.array(BriefingEventSchema).min(4).max(6),
   watch_today: z.array(WatchItemSchema),

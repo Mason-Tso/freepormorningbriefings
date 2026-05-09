@@ -44,6 +44,7 @@ const SAMPLE_SNAPSHOT: MarketSnapshot = {
 // ─── MOCK BRIEFING (May 8, 2026) ────────────────────────────────────────────
 const SAMPLE_BRIEFING: Briefing = {
   title: 'Morning Briefing — May 8, 2026',
+  theme: 'Jet fuel crunch meets Hormuz blockade risk as chips lead and uranium quietly arrives.',
   date: 'May 8, 2026',
   events: [
     {

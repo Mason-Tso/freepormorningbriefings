@@ -1,18 +1,21 @@
 import { NormalizedArticle } from '../schemas';
 import { fetchRssArticles } from './rss-fetcher';
+import { fetchFmpNews } from './fmp-news-fetcher';
 
-export async function fetchAllSources(): Promise<NormalizedArticle[]> {
+export interface SourceResult {
+  articles: NormalizedArticle[];
+  leadImage: string | null;
+}
+
+export async function fetchAllSources(): Promise<SourceResult> {
   console.log('[orchestrator] Fetching all sources in parallel...');
 
-  const [rssArticles] = await Promise.all([
+  const [fmpResult, rssArticles] = await Promise.all([
+    fetchFmpNews(8),
     fetchRssArticles(),
-    // Twitter signal fetcher would go here (requires TradeNews API or Twitter API)
-    // fetchTwitterSignals(),
-    // News wire fetcher (requires Polygon API key)
-    // fetchNewsWire(),
   ]);
 
-  const all = [...rssArticles];
+  const all = [...fmpResult.articles, ...rssArticles];
 
   // Deduplicate by URL
   const seen = new Set<string>();
@@ -22,6 +25,6 @@ export async function fetchAllSources(): Promise<NormalizedArticle[]> {
     return true;
   });
 
-  console.log(`[orchestrator] ${deduped.length} unique articles after URL dedup`);
-  return deduped;
+  console.log(`[orchestrator] ${deduped.length} unique articles (${fmpResult.articles.length} FMP + ${rssArticles.length} RSS)`);
+  return { articles: deduped, leadImage: fmpResult.leadImage };
 }
