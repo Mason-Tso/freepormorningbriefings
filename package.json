@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "AI-powered morning market briefing generator for Freeport Markets X posts",
   "scripts": {
+    "briefing": "ts-node src/from-app.ts",
     "generate": "ts-node src/index.ts",
     "sample": "ts-node src/sample.ts",
     "typecheck": "tsc --noEmit"

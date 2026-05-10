@@ -4,33 +4,78 @@
 Generates the daily morning briefing X post for @freeportmrkts. The post matches the briefing shown in the Freeport Markets app and is formatted for X (Twitter).
 
 ## Daily Workflow
-1. Mason screenshots the morning briefing from the Freeport app
-2. Pastes the screenshot here
-3. Claude formats it into an X post + finds a matching image
-4. Mason copies the post + downloads the image and posts to X
+```bash
+npm run briefing
+```
+Fetches the live briefing directly from the Freeport app API + live market prices, prints the raw briefing and the formatted X post, writes the post to `output/x-post.txt`.
 
-That's it. No need to run the pipeline manually unless testing.
+After running the command:
+1. Review the raw briefing output (all events, app format)
+2. Claude writes a hook based on the top themes (see Hook section below)
+3. Claude finds a direct image URL for the top story
+4. Mason copies the final post + downloads the image and posts to X
 
-## Running the Pipeline (Optional)
+## How It Works
+- Hits `GET https://trading-api.freeportmarkets.com/v1/analyst/briefing` (no auth required — shared briefing is public)
+- Prints raw briefing first: `briefing.headline` + all `events[].summary` bullets (matches app format)
+- Picks the top 4 events for the X post body (already ranked by the backend)
+- Fetches live market prices from FMP + CoinGecko
+- Formats into X post per the rules below and writes to `output/x-post.txt`
+
+## Legacy Pipeline (RSS-based, rarely needed)
 ```bash
 npm run generate
 ```
-Outputs to `output/x-post.txt` and `output/lead-image-url.txt`.
+Generates its own briefing from RSS + FMP news. Does NOT match the app briefing. Only useful for testing the full pipeline end-to-end.
 
-Note: The pipeline generates its own briefing from RSS + FMP news. It will NOT match the app unless the app's briefing is pasted in manually. Always prefer the screenshot workflow above.
+## Full Post Format
+The final post delivered to Mason looks like this:
+
+```
+Morning Briefing — [Date]
+
+**[Hook — one punchy sentence summarising the day's key themes. Bold.]**
+
+[Event 1 — full 2-sentence details text, no em dashes]
+
+[Event 2]
+
+[Event 3]
+
+[Event 4]
+
+📊 SPX 7,399 (+0.8%) · NDX 29,235 (+2.3%) · BTC $80,646 (+0.5%) · WTI $95 (+0.6%) · Gold $4,731 (+0.4%) · 10Y 4.36% (-0.6%)
+
+Watch today:
+  · [Event] ([Time])
+  · [Event] ([Time])
+```
+
+## Hook Rules
+- One sentence, written like the app's top headline — packs the key themes (conflict, macro, tech move, market reaction)
+- Mirrors the style of `briefing.headline` but can be expanded to hit 2-3 themes
+- No em dashes. Use periods instead.
+- Bold when presenting the final post to Mason
+- Example: "Iran's ceasefire frays at Hormuz and Lebanon strikes widen the conflict map, while China stimulus and a $7B DeepSeek raise power tech to +3.4%. Blowout Q1 earnings cushioning the rest."
 
 ## X Post Format Rules
-- Short. Pick the 3-5 most important stories only.
+- Heading: `Morning Briefing — [Date]`
+- Hook first (bold), then event paragraphs
+- Pick the top 4 events (already ranked by the API)
+- Use `events[].details` for each event body (full 2-sentence writer output)
 - No em dashes (—). Use periods instead. Rephrase if needed.
 - No stock tickers ($AMD, etc.) in the post body.
 - No "download Freeport Markets" or app mentions at the end.
 - Human, conversational tone. Write like a smart friend, not a newsletter.
-- End with a market data one-liner: `📊 SPX +0.8% · NDX +2.3% · BTC $80,914 · WTI $95 · Gold $4,731 · 10Y 4.36%`
+- End with a market data one-liner: `📊 SPX · NDX · BTC · WTI · Gold · 10Y`
+- Include Watch today items (max 2) below the market line
 
 ## Image Workflow
-- Find a direct .jpg/.jpeg image URL matching the top story headline
-- Best sources: Reuters CDN, AP News, Al Jazeera, TechCrunch (Getty images)
-- Give Mason the URL to download and attach when posting
+- Search for a direct .jpg/.jpeg image URL matching the top story headline
+- Best sources: ABC News CDN (i.abcnewsfe.com), Al Jazeera, AP News, Reuters CDN
+- Reuters and AP News domains are blocked to the crawler — try ABC News or Al Jazeera first
+- Give Mason the direct URL to download and attach when posting
+- Always verify the URL is openable before giving it to Mason
 
 ## APIs (all keys in .env)
 | Key | Service | What it's used for |
@@ -55,25 +100,34 @@ As of May 2026: Gold ~$4,730, BTC ~$80,000-82,000, SPX ~7,400, NDX ~29,000, WTI 
 ## Key Files
 ```
 src/
-  index.ts                        — Main pipeline entry point
-  pipeline/
-    market-data.ts                — FMP + CoinGecko price fetcher
-    writer-agent.ts               — Claude Opus briefing writer
-    reader-agent.ts               — Article extraction (Claude Haiku)
-    deduplicator.ts               — Story ranking and dedup
+  from-app.ts                     — PRIMARY entry point (npm run briefing)
+  index.ts                        — Legacy RSS pipeline entry point
   fetchers/
-    fmp-news-fetcher.ts           — FMP news API
-    rss-fetcher.ts                — 8 RSS feeds fallback
-    source-orchestrator.ts        — Combines all sources
+    freeport-api-fetcher.ts       — Fetches live briefing from Freeport app API
+    fmp-news-fetcher.ts           — FMP news API (legacy pipeline only)
+    rss-fetcher.ts                — RSS feeds (legacy pipeline only)
+    source-orchestrator.ts        — Combines news sources (legacy pipeline only)
+  pipeline/
+    market-data.ts                — FMP + CoinGecko price fetcher (used by both pipelines)
+    writer-agent.ts               — Claude Opus briefing writer (legacy pipeline only)
+    reader-agent.ts               — Article extraction (legacy pipeline only)
+    deduplicator.ts               — Story ranking (legacy pipeline only)
   output/
-    graphic-generator.ts          — HTML card generator (not used in X post workflow)
-    script-generator.ts           — GRWM video script (not used in X post workflow)
+    graphic-generator.ts          — Not used in X post workflow
+    script-generator.ts           — Not used in X post workflow
 output/
   x-post.txt                      — Ready-to-post X text
-  lead-image-url.txt              — Image URL to download and attach
 ```
 
+## Freeport API Response Shape
+`data.briefing` from the API:
+- `headline` — punchy opener sentence (used as basis for the hook)
+- `market_mood` — 'risk-on' | 'risk-off' | 'mixed' | 'quiet'
+- `events[]` — ranked events; use `details` for full 2-sentence text (`text` is overwritten with the short summary at the API layer); `summary` is the short 1-sentence version shown as bullets in the app
+- `watch_today[]` — scheduled events with `event`, `time`, `why_it_matters`
+
 ## What NOT to Do
-- Do not run the graphic generator or video pipeline for morning briefings (dropped in favor of screenshot workflow)
+- Do not run the graphic generator or video pipeline for morning briefings
 - Do not use Yahoo Finance as primary source — FMP stable API is preferred
 - Do not use `/v3/` FMP endpoints — legacy, not supported on this plan
+- Do not try Reuters or AP News domains for image search — blocked to the crawler
