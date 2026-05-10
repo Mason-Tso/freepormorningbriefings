@@ -3,6 +3,11 @@ import { mkdirSync, writeFileSync } from 'fs';
 import { format } from 'date-fns';
 import { fetchFreeportBriefing, FreeportBriefing, FreeportBriefingEvent } from './fetchers/freeport-api-fetcher';
 import { fetchMarketSnapshot, formatSnapshotOneLiner } from './pipeline/market-data';
+
+function isWeekend(): boolean {
+  const day = new Date().getDay();
+  return day === 0 || day === 6;
+}
 import { MarketSnapshot } from './types';
 
 async function run() {
@@ -30,6 +35,27 @@ async function run() {
   console.log('\n→ Saved to output/x-post.txt');
 }
 
+const MONTH_MAP: Record<string, number> = {
+  Jan: 0, Feb: 1, Mar: 2, Apr: 3, May: 4, Jun: 5,
+  Jul: 6, Aug: 7, Sep: 8, Oct: 9, Nov: 10, Dec: 11,
+  January: 0, February: 1, March: 2, April: 3, June: 5,
+  July: 6, August: 7, September: 8, October: 9, November: 10, December: 11,
+};
+
+function watchItemWithinDays(timeStr: string | undefined, days: number): boolean {
+  if (!timeStr) return false;
+  const match = timeStr.match(/([A-Za-z]+)\s+(\d+)/);
+  if (!match) return false;
+  const month = MONTH_MAP[match[1]];
+  const day = parseInt(match[2]);
+  if (month === undefined || isNaN(day)) return false;
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const eventDate = new Date(now.getFullYear(), month, day);
+  const diffDays = (eventDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24);
+  return diffDays >= 0 && diffDays <= days;
+}
+
 function formatRawBriefing(briefing: FreeportBriefing): string {
   const lines: string[] = [briefing.headline, ''];
 
@@ -37,10 +63,11 @@ function formatRawBriefing(briefing: FreeportBriefing): string {
     lines.push(`• ${evt.summary}`);
   }
 
-  if (briefing.watch_today?.length > 0) {
+  const upcomingWatches = (briefing.watch_today ?? []).filter((w) => watchItemWithinDays(w.time, 3));
+  if (upcomingWatches.length > 0) {
     lines.push('');
     lines.push('Watch today:');
-    for (const w of briefing.watch_today) {
+    for (const w of upcomingWatches) {
       const label = w.time ? `${w.event} (${w.time})` : w.event;
       lines.push(`  · ${label}`);
     }
@@ -63,7 +90,7 @@ function pickEventText(evt: FreeportBriefingEvent): string {
 }
 
 function formatXPost(briefing: FreeportBriefing, snapshot: MarketSnapshot, date: string): string {
-  const marketLine = formatSnapshotOneLiner(snapshot);
+  const marketLine = formatSnapshotOneLiner(snapshot, isWeekend());
   const topEvents = briefing.events.slice(0, 4);
 
   const lines: string[] = [`Morning Briefing — ${date}`, ''];
@@ -75,10 +102,13 @@ function formatXPost(briefing: FreeportBriefing, snapshot: MarketSnapshot, date:
 
   lines.push(`📊 ${marketLine}`);
 
-  if (briefing.watch_today?.length > 0) {
+  const upcomingWatches = (briefing.watch_today ?? [])
+    .filter((w) => watchItemWithinDays(w.time, 3))
+    .slice(0, 2);
+  if (upcomingWatches.length > 0) {
     lines.push('');
     lines.push('Watch today:');
-    for (const w of briefing.watch_today.slice(0, 2)) {
+    for (const w of upcomingWatches) {
       const label = w.time ? `${w.event} (${w.time})` : w.event;
       lines.push(`  · ${label}`);
     }

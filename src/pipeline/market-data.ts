@@ -61,6 +61,52 @@ async function fetchYahooFallback(symbols: string[]): Promise<Record<string, Mar
   return results;
 }
 
+function isWeekend(): boolean {
+  const day = new Date().getDay();
+  return day === 0 || day === 6;
+}
+
+// Hyperliquid perp mid prices — trades 24/7, used as weekend crypto fallback
+async function fetchHyperliquid(): Promise<Record<string, MarketPrice>> {
+  try {
+    const { data: mids } = await axios.post<Record<string, string>>(
+      'https://api.hyperliquid.xyz/info',
+      { type: 'allMids' },
+      { timeout: 8000 }
+    );
+    // Get 24h candle to calculate % change
+    const coins: Array<{ hl: string; symbol: string; label: string }> = [
+      { hl: 'BTC', symbol: 'BTCUSD', label: 'BTC' },
+      { hl: 'ETH', symbol: 'ETHUSD', label: 'ETH' },
+      { hl: 'SOL', symbol: 'SOLUSD', label: 'SOL' },
+    ];
+    const now = Date.now();
+    const yesterday = now - 24 * 60 * 60 * 1000;
+    const results: Record<string, MarketPrice> = {};
+    await Promise.all(
+      coins.map(async ({ hl, symbol, label }) => {
+        const price = parseFloat(mids[hl] ?? '0');
+        if (!price) return;
+        try {
+          const { data: candles } = await axios.post<Array<{ o: string }>>(
+            'https://api.hyperliquid.xyz/info',
+            { type: 'candleSnapshot', req: { coin: hl, interval: '1d', startTime: yesterday, endTime: now } },
+            { timeout: 8000 }
+          );
+          const open = parseFloat(candles?.[0]?.o ?? '0');
+          const change_pct = open ? Math.round(((price - open) / open) * 10000) / 100 : 0;
+          results[symbol] = { symbol, price, change_pct, label };
+        } catch {
+          results[symbol] = { symbol, price, change_pct: 0, label };
+        }
+      })
+    );
+    return results;
+  } catch {
+    return {};
+  }
+}
+
 async function fetchCoinGecko(): Promise<Record<string, MarketPrice>> {
   const apiKey = process.env.COINGECKO_API_KEY;
   const params: Record<string, string> = {
@@ -105,12 +151,17 @@ function toPrice(q: FmpStableQuote, label: string): MarketPrice {
 export async function fetchMarketSnapshot(): Promise<MarketSnapshot> {
   const indexSymbols = ['^GSPC', '^NDX', '^DJI', '^RUT', '^VIX', '^TNX'];
   const commSymbols = ['CLUSD', 'BZUSD', 'GCUSD', 'SIUSD', 'NGUSD'];
+  const weekend = isWeekend();
 
-  const [fmpIndexes, fmpComm, cryptoPrices] = await Promise.all([
+  // On weekends use Hyperliquid for crypto (24/7 live prices + real 24h change)
+  // CoinGecko is fallback if Hyperliquid fails
+  const [fmpIndexes, fmpComm, hlCrypto, cgCrypto] = await Promise.all([
     fetchFmpMany(indexSymbols),
     fetchFmpMany(commSymbols),
+    weekend ? fetchHyperliquid() : Promise.resolve({} as Record<string, MarketPrice>),
     fetchCoinGecko(),
   ]);
+  const cryptoPrices = weekend && Object.keys(hlCrypto).length > 0 ? hlCrypto : cgCrypto;
 
   const indexLabels: Record<string, string> = {
     '^GSPC': 'SPX', '^NDX': 'NDX', '^DJI': 'DJIA', '^RUT': 'RUT', '^VIX': 'VIX', '^TNX': 'US10Y',
@@ -183,7 +234,7 @@ export function formatSnapshot(snap: MarketSnapshot): string {
   ].join('\n');
 }
 
-export function formatSnapshotOneLiner(snap: MarketSnapshot): string {
+export function formatSnapshotOneLiner(snap: MarketSnapshot, weekend = false): string {
   const key = [
     snap.indices.find((i) => i.label === 'SPX'),
     snap.indices.find((i) => i.label === 'NDX'),
@@ -206,5 +257,5 @@ export function formatSnapshotOneLiner(snap: MarketSnapshot): string {
           : p.price.toLocaleString('en-US', { maximumFractionDigits: 0 });
       return `${p.label} ${price} (${sign}${p.change_pct.toFixed(1)}%)`;
     })
-    .join('  ·  ');
+    .join('  ·  ') + (weekend ? '  (indices/commodities: Fri close)' : '');
 }

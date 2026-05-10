@@ -1,96 +1,129 @@
 # Freeport Markets — Morning Briefing Bot
 
 ## What This Does
-Generates the daily morning briefing X post for @freeportmrkts. The post matches the briefing shown in the Freeport Markets app and is formatted for X (Twitter).
+Generates the daily morning briefing X post for @freeportmrkts, formatted for X (Twitter) in a human, journalist style.
 
 ## Daily Workflow
+
+### Step 1 — Pull the data
 ```bash
 npm run briefing
 ```
-Fetches the live briefing directly from the Freeport app API + live market prices, prints the raw briefing and the formatted X post, writes the post to `output/x-post.txt`.
+This prints:
+- Raw briefing (all events in app format)
+- Raw source tweets (the actual signals used to build the briefing)
+- Live market data
+- A draft X post (starting point only — rewrite from source tweets)
 
-After running the command:
-1. Review the raw briefing output (all events, app format)
-2. Claude writes a hook based on the top themes (see Hook section below)
-3. Claude finds a direct image URL for the top story
-4. Mason copies the final post + downloads the image and posts to X
+### Step 2 — Mason sends front page screenshots
+Mason screenshots Bloomberg and WSJ front pages and pastes them into the chat. This catches big stories the API may have missed (it happens — e.g. Supreme Leader MIA story was on WSJ front page but not in the API briefing).
 
-## How It Works
-- Hits `GET https://trading-api.freeportmarkets.com/v1/analyst/briefing` (no auth required — shared briefing is public)
-- Prints raw briefing first: `briefing.headline` + all `events[].summary` bullets (matches app format)
-- Picks the top 4 events for the X post body (already ranked by the backend)
-- Fetches live market prices from FMP + CoinGecko
-- Formats into X post per the rules below and writes to `output/x-post.txt`
+### Step 3 — Claude writes the post
+Using the raw source tweets + Bloomberg/WSJ screenshots:
+- Order stories by importance (biggest news first)
+- Write in human journalist style (see Writing Style below)
+- Add hook at top (bold)
+- End with market data line
+- Find image URL for top story
 
-## Legacy Pipeline (RSS-based, rarely needed)
-```bash
-npm run generate
-```
-Generates its own briefing from RSS + FMP news. Does NOT match the app briefing. Only useful for testing the full pipeline end-to-end.
+### Step 4 — Mason reviews and posts
+One manual check before posting. Adjust anything that reads off.
+
+---
+
+## Writing Style — ZeroHedge Overnight News Format
+Write like a financial journalist, not an AI analyst. Model: @zerohedge "Top Overnight News" posts.
+
+**Do:**
+- Lead with the fact, end with the source: `Iran submitted its response to the US peace framework. WSJ`
+- Short, punchy sentences. One idea per line.
+- Use real numbers from the source tweets: `Aramco Q1 profit jumped 25%`
+- Source attribution at end of each item: `BBG`, `WSJ`, `FT`, `RTRS`, `ABC`, `GS`, `Forbes`
+- Order by importance — biggest story first, always
+- Include stories from Bloomberg/WSJ screenshots even if not in the API
+
+**Don't:**
+- "This matters because..." — cut it
+- "That helps explain why..." — cut it
+- "That keeps X supported while Y..." — cut it
+- "Markets read it as..." — cut it
+- AI analyst framing of any kind
+- Em dashes (—) — use periods or commas instead
+- Stock tickers ($AMD etc.) in the body
+- "Download Freeport Markets" or any app mention
+
+**Example of correct tone:**
+> Iran's Supreme Leader Mojtaba Khamenei hasn't appeared publicly since US and Iranian officials say he was severely injured in a February airstrike, just as negotiators need him most. WSJ
+>
+> Aramco Q1 profit jumped 25% as Hormuz risks pushed its East-West pipeline to full capacity. CEO Amin Nasser warned a swift reopening still wouldn't normalize oil markets quickly. RTRS
+>
+> Goldman expects S&P 500 buybacks to grow only 3% in 2026 as AI capex crowds out shareholder returns. Hyperscaler capex is on pace to equal 100% of cash flows from operations this year. GS
+
+---
 
 ## Full Post Format
-The final post delivered to Mason looks like this:
-
 ```
 Morning Briefing — [Date]
 
-**[Hook — one punchy sentence summarising the day's key themes. Bold.]**
+**[Hook — one punchy sentence hitting the 2-3 biggest themes. Bold. No em dashes.]**
 
-[Event 1 — full 2-sentence details text, no em dashes]
+[Story 1 — biggest news. Fact. Brief context if needed. SOURCE]
 
-[Event 2]
+[Story 2. SOURCE]
 
-[Event 3]
+[Story 3. SOURCE]
 
-[Event 4]
+[Story 4. SOURCE]
 
-📊 SPX 7,399 (+0.8%) · NDX 29,235 (+2.3%) · BTC $80,646 (+0.5%) · WTI $95 (+0.6%) · Gold $4,731 (+0.4%) · 10Y 4.36% (-0.6%)
+[Story 5. SOURCE]
 
-Watch today:
-  · [Event] ([Time])
-  · [Event] ([Time])
+[More if warranted]
+
+📊 SPX 7,399 (+0.8%) · NDX 29,235 (+2.3%) · BTC $80,967 (+1.0%) · WTI $95 (+0.6%) · Gold $4,731 (+0.4%) · 10Y 4.36%
 ```
 
-## Hook Rules
-- One sentence, written like the app's top headline — packs the key themes (conflict, macro, tech move, market reaction)
-- Mirrors the style of `briefing.headline` but can be expanded to hit 2-3 themes
-- No em dashes. Use periods instead.
-- Bold when presenting the final post to Mason
-- Example: "Iran's ceasefire frays at Hormuz and Lebanon strikes widen the conflict map, while China stimulus and a $7B DeepSeek raise power tech to +3.4%. Blowout Q1 earnings cushioning the rest."
+On weekends, append `(Fri close)` to the market line since index/commodity prices are Friday's close.
 
-## X Post Format Rules
-- Heading: `Morning Briefing — [Date]`
-- Hook first (bold), then event paragraphs
-- Pick the top 4 events (already ranked by the API)
-- Use `events[].details` for each event body (full 2-sentence writer output)
-- No em dashes (—). Use periods instead. Rephrase if needed.
-- No stock tickers ($AMD, etc.) in the post body.
-- No "download Freeport Markets" or app mentions at the end.
-- Human, conversational tone. Write like a smart friend, not a newsletter.
-- End with a market data one-liner: `📊 SPX · NDX · BTC · WTI · Gold · 10Y`
-- Include Watch today items (max 2) below the market line
+## Hook Rules
+- One sentence packing the 2-3 biggest themes of the day
+- Written like a Bloomberg headline, not an AI summary
+- No em dashes. Use commas or periods.
+- Bold in the final post
+- Example: "Iran submitted its response to the US peace framework, the biggest diplomatic move in weeks, as a drone hits a ship near Qatar and the Supreme Leader hasn't been seen since a February airstrike."
+
+## Source Tweet Workflow
+The API returns `events[].source_signals[]` — the actual tweets and headlines used to build the briefing. These contain:
+- Real numbers (`Aramco Q1 profit jumped 25%`)
+- Direct quotes (`"We're starting to see risks of supply outages"`)
+- The actual source handle (`@Reuters`, `Bloomberg/markets`, `@KobeissiLetter`)
+
+Use these as the raw material for writing — not the AI-processed `events[].details` text. The details text is too analytical and sounds like an AI.
 
 ## Image Workflow
-- Search for a direct .jpg/.jpeg image URL matching the top story headline
-- Best sources: ABC News CDN (i.abcnewsfe.com), Al Jazeera, AP News, Reuters CDN
-- Reuters and AP News domains are blocked to the crawler — try ABC News or Al Jazeera first
-- Give Mason the direct URL to download and attach when posting
-- Always verify the URL is openable before giving it to Mason
+- Search for a direct .jpg/.jpeg image matching the top story
+- Best sources: ABC News CDN (i.abcnewsfe.com), Al Jazeera CDN (aje.news)
+- Reuters and AP News domains are blocked to the web crawler — don't try them
+- Give Mason the direct CDN URL (not the article URL) to download and attach
+- Verify it's openable before giving it to Mason
+
+## Market Data — Weekend Handling
+- Weekdays: FMP for indices/commodities, CoinGecko Pro for crypto
+- Weekends: Hyperliquid for crypto (24/7 live prices + real 24h change), FMP for indices/commodities (shows Friday close — flagged in output)
+- Watch Today: only shows events within 3 days. If nothing is within 3 days, section is omitted.
 
 ## APIs (all keys in .env)
 | Key | Service | What it's used for |
 |-----|---------|-------------------|
-| `ANTHROPIC_API_KEY` | Anthropic | Generates briefing text (Claude Opus) |
-| `FMP_API_KEY` | Financial Modeling Prep | Live market prices (indices, commodities) — uses `/stable/` endpoints only, NOT `/v3/` (legacy) |
-| `COINGECKO_API_KEY` | CoinGecko Pro | Crypto prices (BTC, ETH, SOL) — uses `pro-api.coingecko.com` |
-| `TWITTER_BEARER_TOKEN` | Twitter API v2 | Available for news signals (expensive, limit use) |
+| `ANTHROPIC_API_KEY` | Anthropic | Claude (legacy pipeline only) |
+| `FMP_API_KEY` | Financial Modeling Prep | Live market prices — `/stable/` endpoints only, NOT `/v3/` |
+| `COINGECKO_API_KEY` | CoinGecko Pro | Crypto prices weekdays — `pro-api.coingecko.com` |
+| `TWITTER_BEARER_TOKEN` | Twitter API v2 | Available, expensive — limit use |
 | `DEFI_LLAMA_API_KEY` | DefiLlama | Available for DeFi/onchain data |
 | `OPENAI_API_KEY` | OpenAI | Available if needed |
 
 ## FMP API Notes
 - Base URL: `https://financialmodelingprep.com/stable`
-- Quote endpoint: `/stable/quote?symbol=^GSPC&apikey=KEY` (single symbol only, no comma-separated batch)
-- News: `/stable/news/general-latest?limit=50&apikey=KEY`
+- Quote endpoint: `/stable/quote?symbol=^GSPC&apikey=KEY` (single symbol only)
 - Index symbols: `^GSPC` (SPX), `^NDX`, `^DJI`, `^RUT`, `^VIX`, `^TNX`
 - Commodity symbols: `GCUSD` (Gold), `CLUSD` (WTI), `BZUSD` (Brent), `NGUSD` (Nat Gas)
 
@@ -108,7 +141,7 @@ src/
     rss-fetcher.ts                — RSS feeds (legacy pipeline only)
     source-orchestrator.ts        — Combines news sources (legacy pipeline only)
   pipeline/
-    market-data.ts                — FMP + CoinGecko price fetcher (used by both pipelines)
+    market-data.ts                — FMP + CoinGecko + Hyperliquid price fetcher
     writer-agent.ts               — Claude Opus briefing writer (legacy pipeline only)
     reader-agent.ts               — Article extraction (legacy pipeline only)
     deduplicator.ts               — Story ranking (legacy pipeline only)
@@ -116,18 +149,21 @@ src/
     graphic-generator.ts          — Not used in X post workflow
     script-generator.ts           — Not used in X post workflow
 output/
-  x-post.txt                      — Ready-to-post X text
+  x-post.txt                      — Draft X post (rewrite from source tweets before using)
 ```
 
 ## Freeport API Response Shape
 `data.briefing` from the API:
-- `headline` — punchy opener sentence (used as basis for the hook)
+- `headline` — short title (used as basis for hook)
 - `market_mood` — 'risk-on' | 'risk-off' | 'mixed' | 'quiet'
-- `events[]` — ranked events; use `details` for full 2-sentence text (`text` is overwritten with the short summary at the API layer); `summary` is the short 1-sentence version shown as bullets in the app
-- `watch_today[]` — scheduled events with `event`, `time`, `why_it_matters`
+- `events[].summary` — short 1-sentence version (shown as bullets in app)
+- `events[].details` — full 2-sentence AI-written text (too analytical for X post — use source tweets instead)
+- `events[].source_signals[]` — raw tweets/headlines used to build the event. USE THESE.
+- `watch_today[]` — upcoming economic events with `event`, `time`, `why_it_matters`
 
 ## What NOT to Do
+- Do not use `events[].details` as the X post body — it sounds like AI
 - Do not run the graphic generator or video pipeline for morning briefings
-- Do not use Yahoo Finance as primary source — FMP stable API is preferred
 - Do not use `/v3/` FMP endpoints — legacy, not supported on this plan
 - Do not try Reuters or AP News domains for image search — blocked to the crawler
+- Do not post without Mason's manual review
