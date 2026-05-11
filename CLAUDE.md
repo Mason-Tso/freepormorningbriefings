@@ -16,7 +16,11 @@ This prints:
 - A draft X post (starting point only — rewrite from source tweets)
 
 ### Step 2 — Mason sends front page screenshots
-Mason screenshots Bloomberg and WSJ front pages and pastes them into the chat. This catches big stories the API may have missed (it happens — e.g. Supreme Leader MIA story was on WSJ front page but not in the API briefing).
+Mason screenshots Bloomberg, WSJ, and The Economist (World in Brief) front pages and pastes them into the chat. This catches big stories the API may have missed (it happens — e.g. Supreme Leader MIA story was on WSJ front page but not in the API briefing).
+
+- **Bloomberg** — lead stories, markets, geopolitics
+- **WSJ** — US politics, business, exclusives
+- **The Economist: World in Brief** — global macro, international angles Bloomberg/WSJ may underweight
 
 ### Step 3 — Claude writes the post
 Using the raw source tweets + Bloomberg/WSJ screenshots:
@@ -38,7 +42,7 @@ Write like a financial journalist, not an AI analyst. Model: @zerohedge "Top Ove
 - Lead with the fact, end with the source: `Iran submitted its response to the US peace framework. WSJ`
 - Short, punchy sentences. One idea per line.
 - Use real numbers from the source tweets: `Aramco Q1 profit jumped 25%`
-- Source attribution at end of each item: `BBG`, `WSJ`, `FT`, `RTRS`, `ABC`, `GS`, `Forbes`
+- Source attribution at end of each item: `BBG`, `WSJ`, `FT`, `RTRS`, `Economist`, `ABC`, `GS`, `Forbes`
 - Order by importance — biggest story first, always
 - Include stories from Bloomberg/WSJ screenshots even if not in the API
 
